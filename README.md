@@ -10,6 +10,10 @@ Loglunatic is written in Lua, and depends on LuaJIT (for the FFI and bitops libr
 ## License
 BSD.
 
+## Documentation
+
+A brief overview/tutorial appears below. The [Wiki](https://github.com/arekinath/loglunatic/wiki) also contains more detailed references for the supported functions / config elements.
+
 ## Using Loglunatic
 
 Loglunatic, much like logstash, is based around config files that describe what it should do. In the config file, you build a pipeline using the link{} function. Loglunatic's config files are actually Lua code, which gives you tremendous flexibility.

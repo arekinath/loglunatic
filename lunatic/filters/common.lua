@@ -142,6 +142,13 @@ local function match_fields_filter(parser, field, extras)
 end
 exports.new_mfilter = match_fields_filter
 
+local function cleanparser(tbl)
+	tbl.reactor = nil
+	tbl.field = nil
+	tbl.anchor = nil
+	tbl.anywhere = nil
+end
+
 local grok_base = { any = (1 - V("compiled"))^0 * V("compiled") }
 function exports.grok_compile(tbl)
 	local pattern = tbl.pattern or tbl
@@ -153,20 +160,22 @@ function exports.grok_compile(tbl)
 		for k,v in pairs(pattern) do
 			if type(v) == "string" then
 				pattern[k] = qp_compile(v)
-			elseif type(v) == "table" and k == "reactor" then
-				pattern[k] = nil
 			end
 		end
 		if tbl.anchor or tbl.anywhere == false then
+			cleanparser(pattern)
 			pattern = new_parser("compiled", pattern)
 		else
+			cleanparser(pattern)
 			pattern = new_parser("any", grok_base, pattern)
 		end
 	elseif type(pattern) == "table" and type(pattern[1]) == "userdata" then
 		pattern.compiled = pattern[1]
 		if tbl.anchor or tbl.anywhere == false then
+			cleanparser(pattern)
 			pattern = new_parser("compiled", pattern)
 		else
+			cleanparser(pattern)
 			pattern = new_parser("any", grok_base, pattern)
 		end
 	else

@@ -283,18 +283,29 @@ function table_to_json(tbl)
 	local first = true
 	local a = function(s) json = json .. s end
 	for k,v in pairs(tbl) do
-		if not first then a(",") end
-		first = false
-		if type(v) == "string" then
-			v = v:gsub("\\","\\\\"):gsub("\"", "\\\""):gsub("\n","")
-			a(string.format("\"%s\":\"%s\"", k, v))
-		elseif type(v) == "table" then
-			a(string.format("\"%s\":%s", k, table_to_json(v)))
-		else
-			a(string.format("\"%s\":%s", k, v))
+		if type(k) == "string" then
+			if not first then a(",") end
+			first = false
+			if type(v) == "string" then
+				v = v:gsub("\\","\\\\"):gsub("\"", "\\\""):gsub("\n","")
+				a(string.format("\"%s\":\"%s\"", k, v))
+			elseif type(v) == "table" then
+				a(string.format("\"%s\":%s", k, table_to_json(v)))
+			else
+				a(string.format("\"%s\":%s", k, v))
+			end
 		end
 	end
 	return json .. "}"
+end
+
+local function quote_tags(tags)
+	local tbl = {}
+	local tgs = tags or {}
+	for i,v in ipairs(tgs) do
+		table.insert(tbl, "\"" .. v:gsub("[^a-zA-Z0-9_]","") .. "\"")
+	end
+	return table.concat(tbl, ",")
 end
 
 local jsonify = new_filter("jsonify")
@@ -305,6 +316,7 @@ function jsonify:run(input)
 	a(string.format("\"@timestamp\":\"%s\",", input.timestamp))
 	a(string.format("\"@source\":\"%s\",", input.source))
 	a(string.format("\"@type\":\"%s\",", input.type))
+	a(string.format("\"@tags\":[%s],", quote_tags(input.tags)))
 	a("\"@fields\":")
 	a(table_to_json(input.fields))
 	a(",")

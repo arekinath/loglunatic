@@ -11,6 +11,7 @@ local f = require("lunatic/filters/common")
 local multiline = f.new_filter("multiline")
 function multiline:run(input)
 	local ts = nil
+       local msg = input.message
 	if self.startp ~= nil then
 		ts = lpeg.match(self.startp, input.message)
 	end
@@ -23,7 +24,7 @@ function multiline:run(input)
 		local ret = nil
 		if self.started then
 			if self.keep_end then
-				table.insert(self.sofar, input.message)
+                               table.insert(self.sofar, msg)
 			end
 			input.message = table.concat(self.sofar, "\n")
 			ret = input
@@ -31,7 +32,7 @@ function multiline:run(input)
 		self.started = true
 		self.n = 0
 		if self.keep_start then
-			self.sofar = { input.message }
+                       self.sofar = { msg }
 		else
 			self.sofar = {}
 		end
@@ -40,7 +41,7 @@ function multiline:run(input)
 		local ret = nil
 		if self.started then
 			if self.keep_end then
-				table.insert(self.sofar, input.message)
+                               table.insert(self.sofar, msg)
 			end
 			input.message = table.concat(self.sofar, "\n")
 			ret = input
@@ -48,7 +49,7 @@ function multiline:run(input)
 		self.started = false
 		return ret
 	elseif self.started then
-		table.insert(self.sofar, input.message)
+               table.insert(self.sofar, msg)
 		self.n = self.n + 1
 		return nil
 	end

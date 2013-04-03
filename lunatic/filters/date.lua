@@ -66,7 +66,10 @@ local long_months = {
 
 local date = f.new_filter("date")
 function date:run(input)
-	input.timestamp = os.date(isotime, os.time())
+	local now = os.time()
+	local tzoffset = os.difftime(now, os.time(os.date("!*t", now)))
+	input.timestamp = os.date(isotime, os.time() - tzoffset)
+
 	if input.fields[self.key] == nil then return input end
 	local m = lpeg.match(self.parser, input.fields[self.key])
 	if m ~= nil then
@@ -99,8 +102,6 @@ function date:run(input)
 			time = time - (m.timezone * 3600)
 		else
 			-- assume it's in local time
-			local now = os.time()
-			local tzoffset = os.difftime(now, os.time(os.date("!*t", now)))
 			time = time - tzoffset
 		end
 		input.timestamp = os.date(isotime, time)

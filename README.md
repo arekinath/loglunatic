@@ -20,7 +20,38 @@ Loglunatic, much like logstash, is based around config files that describe what 
 
 A typical config file consists of a call to the `link{}` function to create a pipeline. First, we list the input to the pipeline, then any filters to apply, and finally an output.
 
-In this example (which parses a basic nginx access log) we take a command pipe as input, apply some filters, and produce output to stdout:
+The simplest example of a loglunatic config file might look like this:
+
+    link {
+        inputs.pipe { command = "tail -f logfile" },
+        grok { pattern = "%{number:foo:int}" },
+        outputs.stdout {}
+    }
+
+If we save this as `example.conf` and start loglunatic up with `./loglunatic.lua example.conf`, we can see what happens:
+
+    $ ./loglunatic.lua example.conf &
+    [1] 46437
+    $ echo 34.1 >> logfile
+    {
+      fields = {
+        foo = 34.1
+      },
+      message = "34.1"
+    }
+    $ echo abcdef >> logfile
+    {
+      fields = {},
+      message = "abcdef"
+    }
+
+The `pipe` input runs a command and uses its output as an input stream, while the `stdout` output module simply pretty-prints the data to stdout where we can see it. We appended two new lines to `logfile` while loglunatic was running to demonstrate it parsing the lines as they are followed by `tail -f`.
+
+In the first message, we can see that the `grok` filter parsed the number and stored it in the field `foo`. In the second, the grok filter did not do anything and the message simply went from input into output.
+
+### Example: parsing nginx access logs
+
+Another more complicated example, below, parses a basic nginx access log. Once again, we take a command pipe as input, apply some filters, and produce output to stdout:
 
     link {
         inputs.pipe { command = "tail -f /var/log/nginx/access.log" },
@@ -42,6 +73,10 @@ In this example (which parses a basic nginx access log) we take a command pipe a
 
         outputs.stdout {}
     }
+
+This time, however, we've added quite a few more filters. Filters stack up in order, each one applying to the modified table or object output by the last.
+
+In particular, note the fact that the second `grok` filter uses `field = "request"`. The `request` field was created by the first `grok` (`%{qs:request}` -- `qs` is a predefined pattern for a quoted string). In this way you can parse nested data elegantly.
 
 Really the core of Loglunatic is the `grok{}` filter, which is used for parsing the log message text and splitting it up into semantic fields. `grok` accepts a pattern syntax very similar to the Logstash `grok`, but notably, it can also be used to build any abritrary LPEG parser. In the example above you can see both a `grok` based only on a logstash-style pattern, and one that combines this with an LPEG pattern.
 

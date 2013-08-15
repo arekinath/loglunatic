@@ -101,7 +101,12 @@ To run the config file above, we could save it in "example.conf" and apply:
       type = "nginx_access"
     }
 
-As you can see, the `stdout{}` output "pretty-prints" the internal representation of the log event as a Lua table. We could also replace `stdout` with the `elasticsearch.http` output module, to submit this as JSON to ElasticSearch. The JSON it generates is compatible with logstash, and even stored in the same day-by-day indexes, so you can keep using the same tools (such as Kibana) that you would use with logstash.
+
+### Output to ElasticSearch
+
+We could also replace `stdout` with the `elasticsearch.http` output module, to submit this as JSON to ElasticSearch. The JSON it generates is compatible with logstash, and even stored in the same day-by-day indexes, so you can keep using the same tools (such as Kibana) that you would use with logstash.
+
+You can provide options to the `elasticsearch.http` module such as the hostname and port to connect to, but also the "threshold" that decides how many objects to submit at once to a `_bulk` call. See the Wiki for more documentation.
 
 ## As a daemon
 

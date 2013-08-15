@@ -68,6 +68,10 @@ To run the config file above, we could save it in "example.conf" and apply:
 
 As you can see, the `stdout{}` output "pretty-prints" the internal representation of the log event as a Lua table. We could also replace `stdout` with the `elasticsearch.http` output module, to submit this as JSON to ElasticSearch. The JSON it generates is compatible with logstash, and even stored in the same day-by-day indexes, so you can keep using the same tools (such as Kibana) that you would use with logstash.
 
+## As a daemon
+
+Loglunatic already comes equipped to become a daemon without any other tools necessary. This simplifies your init scripts and monitoring. Just use the `-d` switch (run `loglunatic.lua` without any arguments to see the usage message).
+
 ## Performance/footprint
 
 Running Logstash on one particular server I take care of at work was using ~10-20% CPU and 100+MB RSS. To do the same job with Loglunatic, I see it using ~1% CPU and less than 10MB RSS. I consider this to be good enough for what I need, but if someone else wants to actually benchmark and compare things, that would be cool.

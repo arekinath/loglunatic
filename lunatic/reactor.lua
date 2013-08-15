@@ -204,6 +204,11 @@ end
 
 function Channel:write(str)
 	local len = #str
+	local used = (self.wbufwrite - self.wbufread)
+	if used < 0 then used = (Channel.write_buf - self.wbufread) + self.wbufwrite end
+	if (used + len) >= Channel.write_buf then
+		error("not enough buffer space")
+	end
 	local newptr = self.wbufwrite + len
 	if (newptr >= Channel.write_buf) then
 		local tmp = ffi.new("char[?]", len)

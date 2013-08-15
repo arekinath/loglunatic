@@ -19,20 +19,10 @@ struct pollfd {
 	short revents;
 };
 int read(int fd, void *buf, int size);
+int write(int fd, const void *buf, int bytes);
 int poll(struct pollfd *fds, unsigned long nfds, int timeout);
 int write(int fd, const void *buf, int bytes);
 int close(int fd);
-
-struct addrinfo {
-	int ai_flags;
-	int ai_family;
-	int ai_socktype;
-	int ai_protocol;
-	int ai_addrlen;
-	struct sockaddr *ai_addr;
-	char *ai_canonname;
-	struct addrinfo *ai_next;
-};
 
 struct sockaddr {
 	uint8_t sa_len;
@@ -51,7 +41,37 @@ int getaddrinfo(const char *hostname, const char *servname, const struct addrinf
 void freeaddrinfo(struct addrinfo *ai);
 int socket(int family, int type, int protocol);
 int connect(int sock, struct sockaddr *name, int namelen);
+
+char *strerror(int errno);
 ]]
+
+if ffi.os == "OSX" then
+	ffi.cdef[[
+	struct addrinfo {
+		int ai_flags;
+		int ai_family;
+		int ai_socktype;
+		int ai_protocol;
+		int ai_addrlen;
+		char *ai_canonname;
+		struct sockaddr *ai_addr;
+		struct addrinfo *ai_next;
+	};
+	]]
+else
+	ffi.cdef[[
+	struct addrinfo {
+		int ai_flags;
+		int ai_family;
+		int ai_socktype;
+		int ai_protocol;
+		int ai_addrlen;
+		struct sockaddr *ai_addr;
+		char *ai_canonname;
+		struct addrinfo *ai_next;
+	};
+	]]
+end
 
 local function write(str)
 	return ffi.C.write(1, str, #str)
@@ -92,16 +112,13 @@ function Reactor:run()
 		end
 
 		local ret = ffi.C.poll(pollfds, nfds, -1)
-		if ret < 0 then error("poll failed") end
+		if ret < 0 then error("poll: " .. ffi.string(ffi.C.strerror(ffi.errno()))) end
 		for i,chan in ipairs(self.channels) do
-			if chan.on_writeable ~= nil then
-				if bit.band(pollfds[i-1].revents, POLLOUT) == POLLOUT then
-					chan:on_writeable(self)
-				end
-			else
-				if bit.band(pollfds[i-1].revents, POLLIN) == POLLIN then
-					chan:read_data(self)
-				end
+			if bit.band(pollfds[i-1].revents, POLLIN) == POLLIN then
+				chan:read_data(self)
+			end
+			if bit.band(pollfds[i-1].revents, POLLOUT) == POLLOUT then
+				chan:write_data(self)
 			end
 		end
 
@@ -143,7 +160,14 @@ local Channel = {}
 Channel.__index = Channel
 
 function Channel.new(fd)
-	local chan = { ["fd"] = fd, buffer = ffi.new("char[?]", 8192), bufused = 0 }
+	local chan = {
+		["fd"] = fd,
+		buffer = ffi.new("char[?]", 8192),
+		bufused = 0,
+		wbuf = ffi.new("char[?]", 8192),
+		wbufwrite = 0,
+		wbufread = 0
+	}
 
 	local flags = ffi.C.fcntl(fd, F_GETFL, 0)
 	if flags == -1 then
@@ -167,13 +191,55 @@ end
 
 function Channel:fill_pollfd(s)
 	s.fd = self.fd
-	if self.on_writeable ~= nil then
-		s.events = POLLOUT
+	if self.wbufwrite ~= self.wbufread or self.on_writeable ~= nil then
+		s.events = bit.bor(POLLOUT, POLLIN)
 	else
 		s.events = POLLIN
 	end
 	s.revents = 0
 	return s
+end
+
+function Channel:write(str)
+	local len = #str
+	local newptr = self.wbufwrite + len
+	if (newptr > 8192) then
+		local tmp = ffi.new("char[?]", len)
+		local firstchunk = 8192 - self.wbufwrite
+		ffi.copy(tmp, str, len)
+		ffi.copy(self.wbuf + self.wbufwrite, tmp, firstchunk)
+		ffi.copy(self.wbuf, tmp + firstchunk, len - firstchunk)
+		newptr = len - firstchunk
+	else
+		ffi.copy(self.wbuf + self.wbufwrite, str, len)
+	end
+	self.wbufwrite = newptr
+end
+
+function Channel:write_data(rtor)
+	if self.wbufwrite == self.wbufread and self.on_writeable then
+		self:on_writeable(rtor)
+	elseif self.wbufwrite ~= self.wbufread then
+		local len = self.wbufwrite - self.wbufread
+		if len < 0 then
+			len = 8192 - self.wbufread
+		end
+		local ret = ffi.C.write(self.fd, self.wbuf + self.wbufread, len)
+		if ret < 0 then
+			if ffi.errno == EAGAIN then
+				return
+			else
+				io.write("reactor: write error on fd " .. self.fd .. "\n")
+				self:on_close(rtor)
+				rtor:remove(self)
+			end
+		else
+			self.wbufread = self.wbufread + ret
+			if self.wbufread >= 8192 then
+				self.wbufread = self.wbufread - 8192
+			end
+		end
+	end
 end
 
 function Channel:read_data(rtor)
@@ -223,6 +289,9 @@ local AI_NUMERICSERV = 16
 if ffi.os == "Linux" then
 	AI_NUMERICSERV = 0x0400
 end
+if ffi.os == "OSX" then
+	AI_NUMERICSERV = 0x1000
+end
 
 local TcpChannel = {}
 TcpChannel.__index = Channel
@@ -234,14 +303,16 @@ function TcpChannel.new(host, port)
 	local ai = ffi.new("struct addrinfo*[?]", 1)
 
 	local ret = ffi.C.getaddrinfo(host, tostring(port), hints, ai)
-	if ret ~= 0 then error("getaddrinfo") end
+	if ret ~= 0 then error("getaddrinfo: " .. ffi.string(ffi.C.strerror(ffi.errno()))) end
 
 	local firstai = ai[0]
+	local lasterrno = 0
+	if firstai == nil then error("failed looking up " .. host) end
 	ai = ai[0]
 
 	while ai ~= nil do
 		local s = ffi.C.socket(ai.ai_family, ai.ai_socktype, ai.ai_protocol)
-		if s <= 0 then error("socket") end
+		if s <= 0 then error("socket: " .. ffi.string(ffi.C.strerror(ffi.errno()))) end
 
 		local ret = ffi.C.connect(s, ai.ai_addr, ai.ai_addrlen)
 		if ret == 0 then
@@ -249,13 +320,14 @@ function TcpChannel.new(host, port)
 			local chan = Channel.new(s)
 			return chan
 		end
+		lasterrno = ffi.errno()
 
 		ffi.C.close(s)
 		ai = ai.ai_next
 	end
 
 	ffi.C.freeaddrinfo(firstai)
-	error("tcp_connect failed")
+	error("connect: " .. ffi.string(ffi.C.strerror(lasterrno)))
 end
 
 exports.TcpChannel = TcpChannel

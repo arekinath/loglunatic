@@ -13,13 +13,8 @@ local ffi = require("ffi")
 local bit = require("bit")
 
 ffi.cdef[[
-int write(int fd, const void *buf, int bytes);
 int close(int fd);
 ]]
-
-local function write(fd, string)
-	ffi.C.write(fd, string, #string)
-end
 
 local http = f.new_filter("elasticsearch.http")
 function http:run(tbl)
@@ -53,14 +48,14 @@ function http:run(tbl)
 
 		chan.on_writeable = function(_chan, rtor)
 			if not chan.sent_header then
-				write(chan.fd, "POST /_bulk HTTP/1.1\r\n")
-				write(chan.fd, string.format("Host: %s\r\n", self.host))
-				write(chan.fd, "Connection: close\r\n")
-				write(chan.fd, string.format("Content-Length: %d\r\n", reqlen))
-				write(chan.fd, "\r\n")
+				chan:write("POST /_bulk HTTP/1.1\r\n")
+				chan:write(string.format("Host: %s\r\n", self.host))
+				chan:write("Connection: close\r\n")
+				chan:write(string.format("Content-Length: %d\r\n", reqlen))
+				chan:write("\r\n")
 				chan.sent_header = true
 			elseif not chan.sent_req then
-				write(chan.fd, req)
+				chan:write(req)
 				chan.sent_req = true
 				chan.on_writeable = nil
 			end

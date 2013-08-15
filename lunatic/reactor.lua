@@ -117,11 +117,43 @@ end
 
 exports.Reactor = Reactor
 
+ffi.cdef[[
+int uname(char *);
+int fcntl(int, int, ...);
+]]
+
+local sysnamebuf = ffi.new("char[?]", 16384)
+assert(ffi.C.uname(sysnamebuf) == 0)
+local sysname = ffi.string(sysnamebuf)
+
+local F_GETFL = 0x03
+local F_SETFL = 0x04
+local O_NONBLOCK = 0x04
+local EAGAIN = 35
+if ffi.os == "Linux" or string.match(sysname, "Linux") then
+	O_NONBLOCK = 0x800
+	EAGAIN = 11
+end
+if ffi.os == "Solaris" or string.match(sysname, "SunOS") then
+	O_NONBLOCK = 0x80
+	EAGAIN = 11
+end
+
 local Channel = {}
 Channel.__index = Channel
 
 function Channel.new(fd)
 	local chan = { ["fd"] = fd, buffer = ffi.new("char[?]", 8192), bufused = 0 }
+
+	local flags = ffi.C.fcntl(fd, F_GETFL, 0)
+	if flags == -1 then
+		return nil
+	end
+	flags = bit.bor(flags, O_NONBLOCK)
+	if ffi.C.fcntl(fd, F_SETFL, ffi.new("int", flags)) == -1 then
+		return nil
+	end
+
 	setmetatable(chan, Channel)
 	chan.on_line = function (chan, rtor, line)
 		io.write(string.format("reactor: fd %d got line: '%s'\n", chan.fd, line))
@@ -155,9 +187,13 @@ function Channel:read_data(rtor)
 		rtor:remove(self)
 		return
 	elseif ret < 0 then
-		io.write("reactor: read error on fd " .. self.fd .. "\n")
-		self:on_close(rtor)
-		rtor:remove(self)
+		if ffi.errno == EAGAIN then
+			return
+		else
+			io.write("reactor: read error on fd " .. self.fd .. "\n")
+			self:on_close(rtor)
+			rtor:remove(self)
+		end
 	end
 	self.bufused = self.bufused + ret
 	local i = start

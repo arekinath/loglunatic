@@ -101,14 +101,34 @@ local function new_parser(top, ...)
 end
 exports.new_parser = new_parser
 
-local function new_filter(name)
+local function new_filter(name, protect)
 	local f = { ["name"] = name }
-	function f:__call(...)
-		local res = f.run(self, ...)
-		if res ~= nil and self.sink ~= nil then
-			return self.sink(res)
-		else
-			return res
+	if protect then
+		function f:__call(...)
+			local res, err = pcall(function(...) return f.run(self, ...) end, ...)
+			if res and err ~= nil and self.sink ~= nil then
+				local dsres, dserr = pcall(function() return self.sink(err) end)
+				if dsres then
+					return dserr
+				else
+					print("error downstream of filter: " .. f.name .. ": " .. dserr)
+					return nil
+				end
+			elseif res then
+				return err
+			else
+				print("error in filter: " .. f.name .. ": " .. err)
+				return nil
+			end
+		end
+	else
+		function f:__call(...)
+			local res = f.run(self, ...)
+			if res ~= nil and self.sink ~= nil then
+				return self.sink(res)
+			else
+				return res
+			end
 		end
 	end
 	return f
@@ -120,6 +140,7 @@ local function match_fields_filter(parser, field, extras)
 	function ff:run(input)
 		local f = input.message
 		if field ~= nil then f = input.fields[field] end
+		if f == nil then return input end
 		local t = lpeg.match(parser, f)
 		if t ~= nil then
 			if extras.type ~= nil then input.type = extras.type end
@@ -346,7 +367,7 @@ function exports.map(tbl)
 	return t
 end
 
-local input = new_filter("input")
+local input = new_filter("input", true)
 function input:run(input)
 	return { ["message"] = input, ["fields"] = {} }
 end

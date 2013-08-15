@@ -13,11 +13,15 @@ local pattern_lib = {
 	spc = S(" \t\r\n")^1,
 
 	anything = P(1)^1,
+	["end"] = P(-1),
 	qs = P("\"") * C( ((P(1) - S("\\\"")) + (P("\\") * P(1)) )^1) * P("\""),
 
-	ipv4 = (R("09")^-3 * P("."))^3 * R("09")^-3,
+	v4part = R("09") * R("09")^-2,
+	ipv4 = V("v4part") * P(".") * V("v4part") * (P(".") * V("v4part"))^-2,
 	hexdigi = R("09") + R("af") + R("AF"),
-	ipv6 = (V("hexdigi")^-4 * P(":"))^-7 * V("hexdigi")^-4,
+	v6part = V("hexdigi") * V("hexdigi")^-3,
+	ipv6tail = (P("::") * V("v6part")) + (P(":") * V("v6part") * V("ipv6tail")) + (P(":") * V("v6part")),
+	ipv6 = (P("::") * V("v6part")) + (V("v6part") * V("ipv6tail")),
 	ip = V("ipv4") + V("ipv6"),
 
 	hostname = V("ip") + (R("AZ") + R("az") + R("09") + S(".-_"))^1,

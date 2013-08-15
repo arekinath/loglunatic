@@ -158,13 +158,15 @@ end
 
 local Channel = {}
 Channel.__index = Channel
+Channel.write_buf = 8192
+Channel.read_buf = 8192
 
 function Channel.new(fd)
 	local chan = {
 		["fd"] = fd,
-		buffer = ffi.new("char[?]", 8192),
+		buffer = ffi.new("char[?]", Channel.read_buf),
 		bufused = 0,
-		wbuf = ffi.new("char[?]", 8192),
+		wbuf = ffi.new("char[?]", Channel.write_buf),
 		wbufwrite = 0,
 		wbufread = 0
 	}
@@ -203,9 +205,9 @@ end
 function Channel:write(str)
 	local len = #str
 	local newptr = self.wbufwrite + len
-	if (newptr > 8192) then
+	if (newptr >= Channel.write_buf) then
 		local tmp = ffi.new("char[?]", len)
-		local firstchunk = 8192 - self.wbufwrite
+		local firstchunk = Channel.write_buf - self.wbufwrite
 		ffi.copy(tmp, str, len)
 		ffi.copy(self.wbuf + self.wbufwrite, tmp, firstchunk)
 		ffi.copy(self.wbuf, tmp + firstchunk, len - firstchunk)
@@ -222,11 +224,11 @@ function Channel:write_data(rtor)
 	elseif self.wbufwrite ~= self.wbufread then
 		local len = self.wbufwrite - self.wbufread
 		if len < 0 then
-			len = 8192 - self.wbufread
+			len = Channel.write_buf - self.wbufread
 		end
 		local ret = ffi.C.write(self.fd, self.wbuf + self.wbufread, len)
 		if ret < 0 then
-			if ffi.errno == EAGAIN then
+			if ffi.errno() == EAGAIN then
 				return
 			else
 				io.write("reactor: write error on fd " .. self.fd .. "\n")
@@ -235,8 +237,8 @@ function Channel:write_data(rtor)
 			end
 		else
 			self.wbufread = self.wbufread + ret
-			if self.wbufread >= 8192 then
-				self.wbufread = self.wbufread - 8192
+			if self.wbufread >= Channel.write_buf then
+				self.wbufread = self.wbufread - Channel.write_buf
 			end
 		end
 	end
@@ -244,7 +246,7 @@ end
 
 function Channel:read_data(rtor)
 	local start = self.bufused
-	local limit = 8192 - self.bufused
+	local limit = Channel.read_buf - self.bufused
 
 	local ret = ffi.C.read(self.fd, self.buffer + start, limit)
 	if ret == 0 then
@@ -253,10 +255,10 @@ function Channel:read_data(rtor)
 		rtor:remove(self)
 		return
 	elseif ret < 0 then
-		if ffi.errno == EAGAIN then
+		if ffi.errno() == EAGAIN then
 			return
 		else
-			io.write("reactor: read error on fd " .. self.fd .. "\n")
+			io.write("reactor: read error on fd " .. self.fd .. ": " .. ffi.string(ffi.C.strerror(ffi.errno())) .. "\n")
 			self:on_close(rtor)
 			rtor:remove(self)
 		end

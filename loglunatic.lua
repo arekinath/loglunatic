@@ -6,20 +6,95 @@ Copyright (c) 2013, Alex Wilson, the University of Queensland
 Distributed under a BSD license -- see the LICENSE file in the root of the distribution.
 ]]
 
-local fname = arg[1]
+local function usage()
+	io.write("Usage: ./loglunatic.lua [-d|--daemon] [-p|--pidfile <file>] [-l|--logfile <file>] <config>\n")
+	os.exit(1)
+end
+
+local fname = nil
+local lastarg = nil
+local logfile = "lunatic.log"
+local pidfile = "lunatic.pid"
+local foreground = true
+
+for i,v in ipairs(arg) do
+	if v == "--daemon" or v == "-d" then
+		foreground = false
+	elseif lastarg == "--logfile" or lastarg == "-l" then
+		logfile = v
+	elseif lastarg == "--pidfile" or lastarg == "-p" then
+		pidfile = v
+	else
+		fname = v
+	end
+	lastarg = v
+end
 if fname == nil then
-	io.write("Usage: ./loglunatic.lua <conffile>\n")
-	return false
+	usage()
 end
 local f, err = loadfile(fname)
 if f == nil then
 	io.write("Could not process config file " .. fname .. "\n")
 	io.write(err .. "\n")
-	return false
+	os.exit(1)
 end
 
-local l = require('lunatic')
-local lpeg = require('lpeg')
+local lpeg = assert(require('lpeg'))
+local ffi = assert(require('ffi'))
+local bit = assert(require('bit'))
+local l = assert(require('lunatic'))
+
+ffi.cdef[[
+int fork(void);
+int setsid(void);
+int close(int);
+typedef void (*sig_t)(int);
+sig_t signal(int sig, sig_t func);
+int dup2(int from, int to);
+int open(const char *path, int oflag, ...);
+]]
+
+local O_WRONLY = 0x01
+local O_CREAT = 0x0200
+if ffi.os == "Linux" then
+	O_CREAT = 0x40
+end
+if ffi.os == "POSIX" then
+	O_CREAT = 0x100
+end
+
+local function daemonize()
+	assert(io.open(logfile, "w"))
+	local fd = ffi.C.open(logfile, O_WRONLY)
+	assert(fd >= 0)
+
+	local r = ffi.C.fork()
+	if r < 0 then
+		print("fork failed: " .. ffi.errno)
+		os.exit(1)
+	elseif r > 0 then
+		local pidfile = io.open(pidfile, "w")
+		pidfile:write(r .. "\n")
+		pidfile:close()
+		os.exit(0)
+	end
+
+	ffi.C.setsid()
+
+	ffi.C.close(0)
+	ffi.C.close(1)
+	ffi.C.close(2)
+
+	ffi.C.dup2(fd, 0)
+	ffi.C.dup2(fd, 1)
+	ffi.C.dup2(fd, 2)
+
+	print("daemonized ok, ready to go")
+end
+
+if not foreground then
+	daemonize()
+end
 
 local rtor = l.Reactor.new()
 

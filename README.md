@@ -56,19 +56,26 @@ Another more complicated example, below, parses a basic nginx access log. Once a
     link {
         inputs.pipe { command = "tail -f /var/log/nginx/access.log" },
 
-        stamper { type = "nginx_access", scheme = "tail", path = "var/log/nginx/access.log" },
+        stamper {
+            type = "nginx_access",
+            scheme = "tail",
+            path = "var/log/nginx/access.log"
+        },
         grok {
             pattern = {
                 "%{hostname:client} %{notspace} %{notspace:user} [%{notsq:timestamp}] %{qs:request} %{number:response_code:int} %{number:bytes:int} %{qs:referer} %{qs:user_agent}",
                 notsq = (1 - P("]"))^1
             },
-            anywhere = false
+            anchor = true
         },
         grok {
             pattern = "%{word:request_method} %{notspace:request_path} HTTP/%{number:http_version:float}",
-            field = "request", anywhere = false
+            field = "request",
+            anchor = true
         },
-        date { type = "http" },
+        date {
+            type = "http"
+        },
         unfold_fields {},
 
         outputs.stdout {}

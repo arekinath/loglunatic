@@ -38,11 +38,11 @@ local function pipe(tbl)
 		ffi.C.close(fds[1])
 
 		local args = ffi.new("char *[?]", 4)
-		args[0] = ffi.new("char[?]", 5, "bash")
+		args[0] = ffi.new("char[?]", 5, "sh")
 		args[1] = ffi.new("char[?]", 3, "-c")
 		args[2] = ffi.new("char[?]", #command + 1, command)
 		args[3] = nil
-		ffi.C.execvp("bash", args)
+		ffi.C.execvp("sh", args)
 	else
 		local fd = fds[0]
 		ffi.C.close(fds[1])

@@ -42,7 +42,22 @@ for k,v in pairs(l.inputs) do
 		tbl.reactor = rtor
 		local chan = v(tbl)
 		rtor:add(chan)
-		return l.filters.input{ channel = chan, reactor = rtor }
+		if tbl.restart then
+			chan.old_close = chan.on_close
+			chan.on_close = function(ch, rt)
+				ch.old_close()
+				print("loglunatic: restarting closed input '" .. k .. "'")
+				local newchan = v(tbl)
+				rt:add(newchan)
+				newchan.old_close = newchan.on_close
+				newchan.on_close = ch.on_close
+				local newinp = l.filters.input{ channel = newchan, reactor = rt }
+				newchan.inp = newinp
+				newinp.sink = chan.inp.sink
+			end
+		end
+		chan.inp = l.filters.input{ channel = chan, reactor = rtor }
+		return chan.inp
 	end
 end
 

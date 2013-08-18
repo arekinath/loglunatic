@@ -85,9 +85,8 @@ local function daemonize()
 	ffi.C.close(1)
 	ffi.C.close(2)
 
-	ffi.C.dup2(fd, 0)
-	ffi.C.dup2(fd, 1)
-	ffi.C.dup2(fd, 2)
+	assert(ffi.C.dup2(fd, 1) >= 0)
+	assert(ffi.C.dup2(fd, 2) >= 0)
 
 	print("daemonized ok, ready to go")
 end

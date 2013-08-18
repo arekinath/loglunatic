@@ -86,10 +86,6 @@ local function daemonize()
 
 	ffi.C.setsid()
 
-	ffi.C.close(0)
-	ffi.C.close(1)
-	ffi.C.close(2)
-
 	assert(ffi.C.dup2(nullfd, 0) >= 0)
 	assert(ffi.C.dup2(fd, 1) >= 0)
 	assert(ffi.C.dup2(fd, 2) >= 0)

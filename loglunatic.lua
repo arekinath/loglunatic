@@ -68,10 +68,6 @@ end
 
 local function daemonize()
 	assert(io.open(logfile, "w"))
-	local fd = ffi.C.open(logfile, bit.bor(O_WRONLY, O_APPEND))
-	local nullfd = ffi.C.open("/dev/null", bit.bor(O_WRONLY, O_APPEND))
-	assert(fd >= 0)
-	assert(nullfd >= 0)
 
 	local r = ffi.C.fork()
 	if r < 0 then
@@ -85,6 +81,11 @@ local function daemonize()
 	end
 
 	ffi.C.setsid()
+
+	local fd = ffi.C.open(logfile, bit.bor(O_WRONLY, O_APPEND))
+	local nullfd = ffi.C.open("/dev/null", bit.bor(O_WRONLY, O_APPEND))
+	assert(fd >= 0)
+	assert(nullfd >= 0)
 
 	assert(ffi.C.dup2(nullfd, 0) >= 0)
 	assert(ffi.C.dup2(fd, 1) >= 0)

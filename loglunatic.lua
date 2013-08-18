@@ -56,9 +56,11 @@ int fsync(int);
 ]]
 
 local O_WRONLY = 0x01
+local O_APPEND = 0x08
 local O_CREAT = 0x0200
 if ffi.os == "Linux" then
 	O_CREAT = 0x40
+	O_APPEND = 0x400
 end
 if ffi.os == "POSIX" then
 	O_CREAT = 0x100
@@ -66,8 +68,10 @@ end
 
 local function daemonize()
 	assert(io.open(logfile, "w"))
-	local fd = ffi.C.open(logfile, O_WRONLY)
+	local fd = ffi.C.open(logfile, bit.bor(O_WRONLY, O_APPEND))
+	local nullfd = ffi.C.open("/dev/null", bit.bor(O_WRONLY, O_APPEND))
 	assert(fd >= 0)
+	assert(nullfd >= 0)
 
 	local r = ffi.C.fork()
 	if r < 0 then
@@ -86,13 +90,15 @@ local function daemonize()
 	ffi.C.close(1)
 	ffi.C.close(2)
 
+	assert(ffi.C.dup2(nullfd, 0) >= 0)
 	assert(ffi.C.dup2(fd, 1) >= 0)
 	assert(ffi.C.dup2(fd, 2) >= 0)
 
 	ffi.C.fsync(fd)
 	ffi.C.close(fd)
+	ffi.C.close(nullfd)
 
-	print("daemonized ok, ready to go")
+	print("\ndaemonized ok, ready to go")
 	ffi.C.fsync(1)
 end
 

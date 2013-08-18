@@ -52,6 +52,7 @@ typedef void (*sig_t)(int);
 sig_t signal(int sig, sig_t func);
 int dup2(int from, int to);
 int open(const char *path, int oflag, ...);
+int fsync(int);
 ]]
 
 local O_WRONLY = 0x01
@@ -88,7 +89,11 @@ local function daemonize()
 	assert(ffi.C.dup2(fd, 1) >= 0)
 	assert(ffi.C.dup2(fd, 2) >= 0)
 
+	ffi.C.fsync(fd)
+	ffi.C.close(fd)
+
 	print("daemonized ok, ready to go")
+	ffi.C.fsync(1)
 end
 
 if not foreground then

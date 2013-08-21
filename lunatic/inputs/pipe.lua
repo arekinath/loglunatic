@@ -47,11 +47,13 @@ local function pipe(tbl)
 		local fd = fds[0]
 		ffi.C.close(fds[1])
 		local chan = r.Channel.new(fd)
-		chan.on_close = function(chan, rtor)
-			io.write("input pipe: " .. command .. ": closing...\n")
-			ffi.C.close(fd)
+		chan.pid = pid
+		chan.command = command
+		chan.on_close = function(ch, rtor)
+			io.write("input pipe: " .. ch.command .. "/"..ch.fd.."/"..ch.pid..": closing...\n")
+			ffi.C.close(ch.fd)
 			local sl = ffi.new("int[?]", 1)
-			ffi.C.waitpid(pid, sl, 0)
+			ffi.C.waitpid(ch.pid, sl, 0)
 		end
 		return chan
 	end

@@ -123,21 +123,23 @@ for k,v in pairs(l.inputs) do
 	env.inputs[k] = function(tbl)
 		tbl.reactor = rtor
 		local chan = v(tbl)
-		rtor:add(chan)
 		if tbl.restart then
+			print("loglunatic: setting up restarter on input '" .. k .. "'")
 			chan.old_close = chan.on_close
 			chan.on_close = function(ch, rt)
-				ch.old_close()
 				print("loglunatic: restarting closed input '" .. k .. "'")
+				ch:old_close(rt)
+				tbl.reactor = rt
 				local newchan = v(tbl)
-				rt:add(newchan)
 				newchan.old_close = newchan.on_close
 				newchan.on_close = ch.on_close
+				rt:add(newchan)
 				local newinp = l.filters.input{ channel = newchan, reactor = rt }
 				newchan.inp = newinp
-				newinp.sink = chan.inp.sink
+				newinp.sink = ch.inp.sink
 			end
 		end
+		rtor:add(chan)
 		chan.inp = l.filters.input{ channel = chan, reactor = rtor }
 		return chan.inp
 	end
@@ -171,4 +173,5 @@ env.link = l.link
 f = setfenv(f, env)
 f()
 
+print("starting reactor..")
 rtor:run()

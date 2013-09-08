@@ -397,7 +397,7 @@ function jsonify:run(input)
 	else
 		print("WARNING: no timestamp set? output may not be sensible")
 	end
-	if input.source and input.type
+	if input.source and input.type then
 		a(string.format("\"@source\":\"%s\",", input.source))
 		a(string.format("\"@type\":\"%s\",", input.type))
 	else

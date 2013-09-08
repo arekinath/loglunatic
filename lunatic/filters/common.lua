@@ -172,12 +172,13 @@ local function cleanparser(tbl)
 	tbl.reactor = nil
 	tbl.field = nil
 	tbl.anchor = nil
+	tbl.multiple = nil
 	tbl.anywhere = nil
 end
 
 local grok_base = {
 	grokanywhere = V("compiled") + (P(1) * V("grokanywhere")),
-	grokstart = V("compiled") + ((1 - S("\r\n"))^0 * S("\r\n")^1 * V("grokstart"))
+	grokstart = S("\r\n")^0 * V("compiled") + ((1 - S("\r\n"))^0 * S("\r\n")^1 * V("grokstart"))
 }
 function exports.grok_compile(tbl)
 	local pattern = tbl.pattern or tbl
@@ -290,12 +291,15 @@ function exports.multitail()
 end
 
 local dygrok_base = {
-	dygrokrep = Ct(Cg(V("grokanywhere"),"this") * (Cg(V("dygrokrep"), "next") + V("end")))
+	dygrok = Ct(Cg(V("grokanywhere"),"this")),
+	dygrokstart = Ct(Cg(V("grokstart"),"this")),
+	dygrokrep = Ct(Cg(V("grokanywhere"),"this") * Cg(V("dygrokrep"), "next")^-1),
+	dygrokrepstart = Ct(Cg(V("grokstart"),"this") * Cg(V("dygrokrepstart"), "next")^-1)
 }
 local dygrok = new_filter("dygrok")
 function dygrok:run(input)
 	local f = input.message
-	if field ~= nil then f = input.fields[field] end
+	if self.field ~= nil then f = input.fields[self.field] end
 	if f == nil then return input end
 	local t = lpeg.match(self.parser, input.message)
 	if t ~= nil then
@@ -314,9 +318,18 @@ function dygrok:run(input)
 	return input
 end
 function exports.dygrok(tbl)
-	tbl.anywhere = true
+	local anchor = (tbl.anchor or tbl.anywhere == false)
+	local multiple = tbl.multiple
+	local field = tbl.field
 	local gr = exports.grok_compile(tbl)
-	local t = { parser = new_parser("dygrokrep", dygrok_base, gr) }
+	local p = new_parser("dygrok", gr, dygrok_base)
+	if multiple then
+		p[1] = p[1] .. "rep"
+	end
+	if anchor then
+		p[1] = p[1] .. "start"
+	end
+	local t = { parser = p, field = field }
 	setmetatable(t, dygrok)
 	return t
 end

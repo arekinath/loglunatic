@@ -13,7 +13,7 @@ local pattern_lib = {
 	spc = S(" \t\r\n")^1,
 
 	anything = P(1)^1,
-	["end"] = P(-1),
+	["end"] = S("\r\n") + P(-1),
 	qs = P("\"") * C( ((P(1) - S("\\\"")) + (P("\\") * P(1)) )^1) * P("\""),
 
 	v4part = R("09") * R("09")^-2,
@@ -174,12 +174,20 @@ local function cleanparser(tbl)
 	tbl.anywhere = nil
 end
 
-local grok_base = { any = (1 - V("compiled"))^0 * V("compiled") }
+local grok_base = {
+	grokanywhere = (1 - V("compiled"))^0 * V("compiled"),
+	grokstart = V("compiled") + ((1 - S("\r\n"))^0 * S("\r\n")^1 * V("grokstart"))
+}
 function exports.grok_compile(tbl)
 	local pattern = tbl.pattern or tbl
 	local field = tbl.field
 	if type(pattern) == "string" then
-		pattern = new_parser("any", grok_base, { compiled = qp_compile(pattern) })
+		local ps = { compiled = qp_compile(pattern) }
+		if tbl.anchor or tbl.anywhere == false then
+			pattern = new_parser("grokstart", grok_base, ps)
+		else
+			pattern = new_parser("grokanywhere", grok_base, ps)
+		end
 	elseif type(pattern) == "table" and type(pattern[1]) == "string" then
 		pattern.compiled = qp_compile(pattern[1])
 		for k,v in pairs(pattern) do
@@ -189,19 +197,19 @@ function exports.grok_compile(tbl)
 		end
 		if tbl.anchor or tbl.anywhere == false then
 			cleanparser(pattern)
-			pattern = new_parser("compiled", pattern)
+			pattern = new_parser("grokstart", grok_base, pattern)
 		else
 			cleanparser(pattern)
-			pattern = new_parser("any", grok_base, pattern)
+			pattern = new_parser("grokanywhere", grok_base, pattern)
 		end
 	elseif type(pattern) == "table" and type(pattern[1]) == "userdata" then
 		pattern.compiled = pattern[1]
 		if tbl.anchor or tbl.anywhere == false then
 			cleanparser(pattern)
-			pattern = new_parser("compiled", pattern)
+			pattern = new_parser("grokstart", grok_base, pattern)
 		else
 			cleanparser(pattern)
-			pattern = new_parser("any", grok_base, pattern)
+			pattern = new_parser("grokanywhere", grok_base, pattern)
 		end
 	else
 		error("unknown pattern passed to grok")

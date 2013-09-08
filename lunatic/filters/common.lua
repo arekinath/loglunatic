@@ -392,14 +392,22 @@ function jsonify:run(input)
 	local json = ""
 	local a = function(s) json = json .. s end
 	a("{")
-	a(string.format("\"@timestamp\":\"%s\",", input.timestamp))
-	a(string.format("\"@source\":\"%s\",", input.source))
-	a(string.format("\"@type\":\"%s\",", input.type))
+	if input.timestamp then
+		a(string.format("\"@timestamp\":\"%s\",", input.timestamp))
+	else
+		print("WARNING: no timestamp set? output may not be sensible")
+	end
+	if input.source and input.type
+		a(string.format("\"@source\":\"%s\",", input.source))
+		a(string.format("\"@type\":\"%s\",", input.type))
+	else
+		print("WARNING: input source and type are not set. did you forget stamper{}?")
+	end
 	a(string.format("\"@tags\":[%s],", quote_tags(input.tags)))
 	a("\"@fields\":")
 	a(table_to_json(input.fields))
 	a(",")
-	a(string.format("\"@message\":\"%s\"", input.message:gsub("\\","\\\\"):gsub("\"", "\\\""):gsub("\n","")))
+	a(string.format("\"@message\":\"%s\"", input.message:gsub("\\","\\\\"):gsub("\"", "\\\""):gsub("\n","\\n")))
 	a("}")
 	return json
 end

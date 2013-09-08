@@ -26,6 +26,7 @@ local pattern_lib = {
 
 	hostname = V("ip") + (R("AZ") + R("az") + R("09") + S(".-_"))^1,
 	notspace = (P(1) - S(" \t\r\n"))^1,
+	restofline = (P(1) - S("\r\n"))^0,
 	word = (R("az") + R("AZ"))^1,
 
 	decimal = P("-")^-1 * R("09")^1 * (P(".") * R("09")^1)^-1,
@@ -320,7 +321,7 @@ function table_to_json(tbl)
 			if not first then a(",") end
 			first = false
 			if type(v) == "string" then
-				v = v:gsub("\\","\\\\"):gsub("\"", "\\\""):gsub("\n","")
+				v = v:gsub("\\","\\\\"):gsub("\"", "\\\""):gsub("\n","\\n")
 				a(string.format("\"%s\":\"%s\"", k, v))
 			elseif type(v) == "table" then
 				a(string.format("\"%s\":%s", k, table_to_json(v)))

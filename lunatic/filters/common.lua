@@ -176,7 +176,7 @@ local function cleanparser(tbl)
 end
 
 local grok_base = {
-	grokanywhere = (1 - V("compiled"))^0 * V("compiled"),
+	grokanywhere = V("compiled") + (P(1) * V("grokanywhere")),
 	grokstart = V("compiled") + ((1 - S("\r\n"))^0 * S("\r\n")^1 * V("grokstart"))
 }
 function exports.grok_compile(tbl)
@@ -286,6 +286,38 @@ function exports.multitail()
 
 	local t = { ["hostname"] = ffi.string(buf), ["curpath"] = nil }
 	setmetatable(t, multitail)
+	return t
+end
+
+local dygrok_base = {
+	dygrokrep = Ct(Cg(V("grokanywhere"),"this") * (Cg(V("dygrokrep"), "next") + V("end")))
+}
+local dygrok = new_filter("dygrok")
+function dygrok:run(input)
+	local f = input.message
+	if field ~= nil then f = input.fields[field] end
+	if f == nil then return input end
+	local t = lpeg.match(self.parser, input.message)
+	if t ~= nil then
+		local function recurse(inp, res)
+			local field = res.this.field
+			local value = res.this.value
+			inp[field] = value
+			if res.next then
+				return recurse(inp, res.next)
+			else
+				return
+			end
+		end
+		recurse(input.fields, t)
+	end
+	return input
+end
+function exports.dygrok(tbl)
+	tbl.anywhere = true
+	local gr = exports.grok_compile(tbl)
+	local t = { parser = new_parser("dygrokrep", dygrok_base, gr) }
+	setmetatable(t, dygrok)
 	return t
 end
 

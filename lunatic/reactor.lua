@@ -158,8 +158,8 @@ end
 
 local Channel = {}
 Channel.__index = Channel
-Channel.write_buf = 64536
-Channel.read_buf = 16384
+Channel.write_buf = 262144
+Channel.read_buf = 32768
 
 function Channel.new(fd)
 	local chan = {

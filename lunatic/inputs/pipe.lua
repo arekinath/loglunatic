@@ -16,6 +16,8 @@ int execvp(const char *file, char *const argv[]);
 int dup2(int oldfd, int newfd);
 int close(int fd);
 int waitpid(int pid, int *stat_loc, int options);
+int kill(int pid, int sig);
+int usleep(uint32_t usecs);
 ]]
 
 local function write(str)
@@ -52,6 +54,9 @@ local function pipe(tbl)
 		chan.on_close = function(ch, rtor)
 			io.write("input pipe: " .. ch.command .. "/"..ch.fd.."/"..ch.pid..": closing...\n")
 			ffi.C.close(ch.fd)
+                       ffi.C.kill(ch.pid, 15)
+                       ffi.C.usleep(10000)
+                       ffi.C.kill(ch.pid, 9)
 			local sl = ffi.new("int[?]", 1)
 			ffi.C.waitpid(ch.pid, sl, 0)
 		end

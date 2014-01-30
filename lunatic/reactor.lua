@@ -24,6 +24,9 @@ int poll(struct pollfd *fds, unsigned long nfds, int timeout);
 int write(int fd, const void *buf, int bytes);
 int close(int fd);
 
+void *malloc(int size);
+void free(void *ptr);
+
 struct sockaddr {
 	uint8_t sa_len;
 	uint8_t sa_family;
@@ -101,6 +104,7 @@ function Reactor:remove(rchan)
 	for x,i in ipairs(ri) do
 		table.remove(self.channels, i)
 	end
+	rchan:cleanup()
 end
 
 function Reactor:run()
@@ -163,7 +167,7 @@ Channel.read_buf = 32768
 function Channel.new(fd)
 	local chan = {
 		["fd"] = fd,
-		buffer = ffi.new("char[?]", Channel.read_buf),
+		buffer = ffi.cast("char *", ffi.C.malloc(Channel.read_buf)),
 		bufused = 0,
 		wrdata = {},
 	}
@@ -188,9 +192,22 @@ function Channel.new(fd)
 	return chan
 end
 
+function Channel:cleanup()
+	ffi.C.free(self.buffer)
+	local buf = self.wrdata.first
+	while buf do
+		ffi.C.free(buf.data)
+		buf = buf.next
+	end
+	self.wrdata.first = nil
+	self.wrdata.last = nil
+	self.bufused = 0
+	self.buffer = nil
+end
+
 function Channel:fill_pollfd(s)
 	s.fd = self.fd
-	if self.wbufwrite ~= self.wbufread or self.on_writeable ~= nil then
+	if self.wrdata.first ~= nil or self.on_writeable ~= nil then
 		s.events = bit.bor(POLLOUT, POLLIN)
 	else
 		s.events = POLLIN
@@ -202,7 +219,7 @@ end
 function Channel:write(str)
 	local len = #str
 
-	local buf = {["data"] = ffi.new("char[?]", len)}
+	local buf = {["data"] = ffi.cast("char *", ffi.C.malloc(len))}
 	buf.size = len
 	buf.pos = 0
 	ffi.copy(buf.data, str, len)
@@ -220,13 +237,9 @@ end
 function Channel:write_data(rtor)
 	local buf = self.wrdata.first
 	if buf == nil then
-		self:on_writeable(rtor)
-	elseif buf.pos >= buf.size then
-		self.wrdata.first = buf.next
-		if self.wrdata.first == nil then
-			self.wrdata.last = nil
+		if self.on_writeable ~= nil then
+			self:on_writeable(rtor)
 		end
-		self:write_data(rtor)
 	else
 		local ret = ffi.C.write(self.fd, buf.data + buf.pos, buf.size - buf.pos)
 		if ret < 0 then
@@ -238,6 +251,13 @@ function Channel:write_data(rtor)
 			rtor:remove(self)
 		else
 			buf.pos = buf.pos + ret
+			if buf.pos >= buf.size then
+				ffi.C.free(buf.data)
+				self.wrdata.first = buf.next
+				if buf.next == nil then
+					self.wrdata.last = nil
+				end
+			end
 		end
 	end
 end

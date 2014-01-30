@@ -167,7 +167,7 @@ Channel.read_buf = 32768
 function Channel.new(fd)
 	local chan = {
 		["fd"] = fd,
-		buffer = ffi.cast("char *", ffi.C.malloc(Channel.read_buf)),
+		buffer = ffi.new("char[?]", Channel.read_buf),
 		bufused = 0,
 		wrdata = {},
 	}
@@ -193,16 +193,7 @@ function Channel.new(fd)
 end
 
 function Channel:cleanup()
-	ffi.C.free(self.buffer)
-	local buf = self.wrdata.first
-	while buf do
-		ffi.C.free(buf.data)
-		buf = buf.next
-	end
-	self.wrdata.first = nil
-	self.wrdata.last = nil
-	self.bufused = 0
-	self.buffer = nil
+	return
 end
 
 function Channel:fill_pollfd(s)
@@ -219,7 +210,7 @@ end
 function Channel:write(str)
 	local len = #str
 
-	local buf = {["data"] = ffi.cast("char *", ffi.C.malloc(len))}
+	local buf = {["data"] = ffi.new("char[?]", len)}
 	buf.size = len
 	buf.pos = 0
 	ffi.copy(buf.data, str, len)
@@ -252,7 +243,6 @@ function Channel:write_data(rtor)
 		else
 			buf.pos = buf.pos + ret
 			if buf.pos >= buf.size then
-				ffi.C.free(buf.data)
 				self.wrdata.first = buf.next
 				if buf.next == nil then
 					self.wrdata.last = nil

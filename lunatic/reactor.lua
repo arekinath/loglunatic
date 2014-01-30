@@ -158,7 +158,6 @@ end
 
 local Channel = {}
 Channel.__index = Channel
-Channel.write_buf = 262144
 Channel.read_buf = 32768
 
 function Channel.new(fd)
@@ -166,9 +165,7 @@ function Channel.new(fd)
 		["fd"] = fd,
 		buffer = ffi.new("char[?]", Channel.read_buf),
 		bufused = 0,
-		wbuf = ffi.new("char[?]", Channel.write_buf),
-		wbufwrite = 0,
-		wbufread = 0
+		wrdata = {},
 	}
 
 	local flags = ffi.C.fcntl(fd, F_GETFL, 0)
@@ -204,47 +201,43 @@ end
 
 function Channel:write(str)
 	local len = #str
-	local used = (self.wbufwrite - self.wbufread)
-	if used < 0 then used = (Channel.write_buf - self.wbufread) + self.wbufwrite end
-	if (used + len) >= Channel.write_buf then
-		error("not enough buffer space")
-	end
-	local newptr = self.wbufwrite + len
-	if (newptr >= Channel.write_buf) then
-		local tmp = ffi.new("char[?]", len)
-		local firstchunk = Channel.write_buf - self.wbufwrite
-		ffi.copy(tmp, str, len)
-		ffi.copy(self.wbuf + self.wbufwrite, tmp, firstchunk)
-		ffi.copy(self.wbuf, tmp + firstchunk, len - firstchunk)
-		newptr = len - firstchunk
+
+	local buf = {["data"] = ffi.new("char[?]", len)}
+	buf.size = len
+	buf.pos = 0
+	ffi.copy(buf.data, str, len)
+
+	local lastbuf = self.wrdata.last
+	if lastbuf ~= nil then
+		lastbuf.next = buf
+		self.wrdata.last = buf
 	else
-		ffi.copy(self.wbuf + self.wbufwrite, str, len)
+		self.wrdata.last = buf
+		self.wrdata.first = buf
 	end
-	self.wbufwrite = newptr
 end
 
 function Channel:write_data(rtor)
-	if self.wbufwrite == self.wbufread and self.on_writeable then
+	local buf = self.wrdata.first
+	if buf == nil then
 		self:on_writeable(rtor)
-	elseif self.wbufwrite ~= self.wbufread then
-		local len = self.wbufwrite - self.wbufread
-		if len < 0 then
-			len = Channel.write_buf - self.wbufread
+	elseif buf.pos >= buf.size then
+		self.wrdata.first = buf.next
+		if self.wrdata.first == nil then
+			self.wrdata.last = nil
 		end
-		local ret = ffi.C.write(self.fd, self.wbuf + self.wbufread, len)
+		self:write_data(rtor)
+	else
+		local ret = ffi.C.write(self.fd, buf.data + buf.pos, buf.size - buf.pos)
 		if ret < 0 then
 			if ffi.errno() == EAGAIN then
 				return
-			else
-				io.write("reactor: write error on fd " .. self.fd .. "\n")
-				self:on_close(rtor)
-				rtor:remove(self)
 			end
+			io.write("reactor: write error on fd " .. self.fd .. "\n")
+			self:on_close(rtor)
+			rtor:remove(self)
 		else
-			self.wbufread = self.wbufread + ret
-			if self.wbufread >= Channel.write_buf then
-				self.wbufread = self.wbufread - Channel.write_buf
-			end
+			buf.pos = buf.pos + ret
 		end
 	end
 end

@@ -7,6 +7,7 @@ Distributed under a BSD license -- see the LICENSE file in the root of the distr
 local exports = {}
 
 exports.elasticsearch = require('lunatic/outputs/elasticsearch')
+exports.carbon = require('lunatic/outputs/carbon')
 
 local inspect = require('lunatic/outputs/inspect')
 local f = require('lunatic/filters/common')

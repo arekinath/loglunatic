@@ -104,6 +104,7 @@ function date:run(input)
 			-- assume it's in local time
 			time = time - tzoffset
 		end
+		input._timestamp = time
 		input.timestamp = os.date(isotime, time)
 	end
 	return input

@@ -20,8 +20,9 @@ local pattern_lib = {
 	ipv4 = V("v4part") * P(".") * V("v4part") * (P(".") * V("v4part"))^-2,
 	hexdigi = R("09") + R("af") + R("AF"),
 	v6part = V("hexdigi") * V("hexdigi")^-3,
-	ipv6tail = (P("::") * V("v6part")) + (P(":") * V("v6part") * V("ipv6tail")) + (P(":") * V("v6part")) + P("::"),
-	ipv6 = (P("::") * V("v6part")) + (V("v6part") * V("ipv6tail")) + P("::"),
+	ipv6tail_nocolon = (P(":") * V("v6part") * V("ipv6tail_nocolon")) + (P(":") * V("v6part")) + P("::"),
+	ipv6tail = (P("::") * V("v6part") * V("ipv6tail_nocolon")) + (P(":") * V("v6part") * V("ipv6tail")) + (P(":") * V("v6part")) + P("::"),
+	ipv6 = (P("::") * V("v6part") * V("ipv6tail_nocolon")) + (V("v6part") * V("ipv6tail")) + P("::"),
 	ip = V("ipv4") + V("ipv6"),
 
 	hostname = V("ip") + (R("AZ") + R("az") + R("09") + S(".-_"))^1,

@@ -53,7 +53,7 @@ date_parsers["apache"] = f.new_parser("date", {
 	)
 })
 
-local isotime = "%Y-%m-%dT%H:%M:%S.%qZ"
+local isotime = "%Y-%m-%dT%H:%M:%S.%%qZ"
 local short_months = {
 	["Jan"]=1, ["Feb"]=2, ["Mar"]=3, ["Apr"]=4, ["May"]=5, ["Jun"]=6,
 	["Jul"]=7, ["Aug"]=8, ["Sep"]=9, ["Oct"]=10, ["Nov"]=11, ["Dec"]=12
@@ -99,7 +99,12 @@ function date:run(input)
 		m.hour = tonumber(m.hour)
 		m.min = tonumber(m.min)
 		m.sec = tonumber(m.sec)
-		if m.msec then m.msec = tonumber(m.msec) end
+		if m.msec ~= nil then
+			m.msec = tonumber(m.msec)
+		else
+			local msecd = m.sec - math.floor(m.sec)
+			if msecd >= 0.001 then m.msec = msecd * 1000 end
+		end
 
 		local time = nil
 		pcall(function() time = os.time(m) end)
@@ -112,7 +117,7 @@ function date:run(input)
 			io.write("from message: '" .. input.message .. "'\n")
 			return input
 		end
-		if m.msec then time = time + m.msec / 1000.0 end
+		if m.msec ~= nil then time = time + m.msec / 1000.0 end
 		if time == self.last_time then
 			self.msec_offset = self.msec_offset + 0.001
 			time = time + self.msec_offset

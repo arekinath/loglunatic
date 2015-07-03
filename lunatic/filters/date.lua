@@ -53,7 +53,7 @@ date_parsers["apache"] = f.new_parser("date", {
 	)
 })
 
-local isotime = "%Y-%m-%dT%H:%M:%S.000Z"
+local isotime = "%Y-%m-%dT%H:%M:%S.%qZ"
 local short_months = {
 	["Jan"]=1, ["Feb"]=2, ["Mar"]=3, ["Apr"]=4, ["May"]=5, ["Jun"]=6,
 	["Jul"]=7, ["Aug"]=8, ["Sep"]=9, ["Oct"]=10, ["Nov"]=11, ["Dec"]=12
@@ -64,11 +64,25 @@ local long_months = {
 	["November"]=11, ["December"]=12
 }
 
+local function make_isotime(ts)
+	local tsi = math.floor(ts)
+	local s = os.date(isotime, tsi)
+	local msec = string.format("%03d", (ts - tsi)*1000)
+	return string.gsub(s, "%%q", msec)
+end
+
 local date = f.new_filter("date")
 function date:run(input)
 	local now = os.time()
+	local reset_msec = true
 	local tzoffset = os.difftime(now, os.time(os.date("!*t", now)))
-	input.timestamp = os.date(isotime, os.time() - tzoffset)
+	input.timestamp = make_isotime(now - tzoffset)
+	if self.last_now == now then
+		self.msec_offset = self.msec_offset + 0.001
+		input.timestamp = make_isotime(now - tzoffset + self.msec_offset)
+		reset_msec = false
+	end
+	self.last_now = now
 
 	if input.fields[self.key] == nil then return input end
 	local m = lpeg.match(self.parser, input.fields[self.key])
@@ -85,6 +99,7 @@ function date:run(input)
 		m.hour = tonumber(m.hour)
 		m.min = tonumber(m.min)
 		m.sec = tonumber(m.sec)
+		if m.msec then m.msec = tonumber(m.msec) end
 
 		local time = nil
 		pcall(function() time = os.time(m) end)
@@ -97,6 +112,15 @@ function date:run(input)
 			io.write("from message: '" .. input.message .. "'\n")
 			return input
 		end
+		if m.msec then time = time + m.msec / 1000.0 end
+		if time == self.last_time then
+			self.msec_offset = self.msec_offset + 0.001
+			time = time + self.msec_offset
+			reset_msec = false
+		end
+		self.last_time = time
+
+		self.last_time = time
 		if m.timezone ~= nil then
 			m.timezone = tonumber(m.timezone)
 			time = time - (m.timezone * 3600)
@@ -105,8 +129,9 @@ function date:run(input)
 			time = time - tzoffset
 		end
 		input._timestamp = time
-		input.timestamp = os.date(isotime, time)
+		input.timestamp = make_isotime(time)
 	end
+	if reset_msec then self.msec_offset = 0.0 end
 	return input
 end
 function exports.date(tbl)
@@ -120,7 +145,7 @@ function exports.date(tbl)
 			error("date: must specify a 'type' or 'pattern'")
 		end
 	end
-	local t = { ["type"] = typ, ["key"] = key, ["parser"] = parser }
+	local t = { ["type"] = typ, ["key"] = key, ["parser"] = parser, ["msec_offset"] = 0 }
 	setmetatable(t, date)
 	return t
 end

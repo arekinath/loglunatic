@@ -135,6 +135,7 @@ function date:run(input)
 		end
 		input._timestamp = time
 		input.timestamp = make_isotime(time)
+		input.fields[self.key] = nil
 	end
 	if reset_msec then self.msec_offset = 0.0 end
 	return input

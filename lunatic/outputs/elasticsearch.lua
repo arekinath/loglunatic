@@ -17,12 +17,17 @@ int close(int fd);
 ]]
 
 local http = f.new_filter("elasticsearch.http")
+http.__index = http
 function http:run(tbl)
 	local input = tbl
+	local rtor = self.rtor
 	if type(input) == "table" then input = self.jsonify(input) end
 
 	table.insert(self.buffer, input)
 	if not self:check_send() then
+		if self.timer_ref ~= nil then
+			rtor:remove_timer(self.timer_ref)
+		end
 		self.timer_ref = rtor:add_timer(self.threshold.time+1, self)
 	end
 

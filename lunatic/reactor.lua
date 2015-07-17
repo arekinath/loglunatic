@@ -133,7 +133,6 @@ function Reactor:add_timer(timeout, handler)
 	}
 	self.timers[id] = t
 
-	io.write(string.format("set up timer id=%d, at time %.2f\n", id, t.time))
 	return id
 end
 
@@ -168,7 +167,6 @@ function Reactor:run()
 
 		assert(ffi.C.gettimeofday(nowtv, nil) == 0)
 		now = tonumber(nowtv.tv_sec) + tonumber(nowtv.tv_usec) / 1.0e6
-		io.write(string.format("loop iteration, t = %.2f\n", now))
 		for id,timer in pairs(self.timers) do
 			if timer.time < now then
 				local h = timer.handler

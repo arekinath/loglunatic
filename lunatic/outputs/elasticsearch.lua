@@ -21,13 +21,34 @@ function http:run(tbl)
 	local input = tbl
 	if type(input) == "table" then input = self.jsonify(input) end
 
+	table.insert(self.buffer, input)
+	if not self:check_send() then
+		self.timer_ref = rtor:add_timer(self.threshold.time+1, self)
+	end
+
+	return tbl
+end
+function http:on_timeout(rtor)
+	self.timer_ref = nil
+	self:check_send()
+end
+function http:check_send()
 	local now = os.time()
 	local since = os.difftime(now, self.last_time)
-
-	table.insert(self.buffer, input)
 	local n = table.getn(self.buffer)
-	if since > self.threshold.time or n > self.threshold.reqs then
+	if (n > 0 and since > self.threshold.time) or n > self.threshold.reqs then
 		self.last_time = now
+
+		-- if this is the first after a long gap we don't want to send
+		-- right away, return false so a timer is set up
+		if n == 1 and n < self.threshold.reqs then
+			return false
+		end
+
+		if self.timer_ref ~= nil then
+			self.rtor:remove_timer(self.timer_ref)
+			self.timer_ref = nil
+		end
 
 		local bucket = os.date(self.bucket, os.time(os.date("!*t", now)))
 		local req = ""
@@ -82,9 +103,9 @@ function http:run(tbl)
 		self.rtor:add(chan)
 
 		self.buffer = {}
+		return true
 	end
-
-	return tbl
+	return false
 end
 function exports.http(tbl)
 	local rtor = tbl.reactor

@@ -40,10 +40,22 @@ struct sockaddr_in {
 	char sin_pad[32];
 };
 
+struct timeval {
+	long tv_sec;
+	long tv_usec;
+};
+
+struct timezone {
+	int tz_minuteswest;
+	int tz_dsttime;
+};
+
 int getaddrinfo(const char *hostname, const char *servname, const struct addrinfo *hints, struct addrinfo **res);
 void freeaddrinfo(struct addrinfo *ai);
 int socket(int family, int type, int protocol);
 int connect(int sock, struct sockaddr *name, int namelen);
+
+int gettimeofday(struct timeval *tp, struct timezone *tzp);
 
 char *strerror(int errno);
 ]]
@@ -87,6 +99,8 @@ function Reactor.new()
 	local reac = {}
 	setmetatable(reac, Reactor)
 	reac.channels = {}
+	reac.timers = {}
+	reac.timer_id = 0
 	return reac
 end
 
@@ -107,22 +121,59 @@ function Reactor:remove(rchan)
 	rchan:cleanup()
 end
 
+function Reactor:add_timer(timeout, handler)
+	local id = self.timer_id
+	self.timer_id = self.timer_id + 1
+
+	local tv = ffi.new("struct timeval")
+	assert(ffi.C.gettimeofday(tv, nil) == 0)
+	local t = {
+		["time"] = timeout + tonumber(tv.tv_sec) + tonumber(tv.tv_usec) / 1.0e6,
+		["handler"] = handler
+	}
+	self.timers[id] = t
+
+	io.write(string.format("set up timer id=%d, at time %.2f\n", id, t.time))
+	return id
+end
+
+function Reactor:remove_timer(id)
+	self.timers[id] = nil
+end
+
 function Reactor:run()
 	local nfds = table.getn(self.channels)
+	local nowtv = ffi.new("struct timeval")
 	local pollfds = ffi.new("struct pollfd[?]", nfds)
 	while nfds > 0 do
 		for i,chan in ipairs(self.channels) do
 			chan:fill_pollfd(pollfds[i-1])
 		end
 
-		local ret = ffi.C.poll(pollfds, nfds, -1)
-		if ret < 0 then error("poll: " .. ffi.string(ffi.C.strerror(ffi.errno()))) end
-		for i,chan in ipairs(self.channels) do
-			if bit.band(pollfds[i-1].revents, POLLIN) == POLLIN then
-				chan:read_data(self)
+		local ret = ffi.C.poll(pollfds, nfds, 500)
+		if ret < 0 then
+			error("poll: " .. ffi.string(ffi.C.strerror(ffi.errno())))
+		end
+
+		if ret > 0 then
+			for i,chan in ipairs(self.channels) do
+				if bit.band(pollfds[i-1].revents, POLLIN) == POLLIN then
+					chan:read_data(self)
+				end
+				if bit.band(pollfds[i-1].revents, POLLOUT) == POLLOUT then
+					chan:write_data(self)
+				end
 			end
-			if bit.band(pollfds[i-1].revents, POLLOUT) == POLLOUT then
-				chan:write_data(self)
+		end
+
+		assert(ffi.C.gettimeofday(nowtv, nil) == 0)
+		now = tonumber(nowtv.tv_sec) + tonumber(nowtv.tv_usec) / 1.0e6
+		io.write(string.format("loop iteration, t = %.2f\n", now))
+		for id,timer in pairs(self.timers) do
+			if timer.time < now then
+				local h = timer.handler
+				self.timers[id] = nil
+				h:on_timeout(self)
 			end
 		end
 

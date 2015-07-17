@@ -12,11 +12,13 @@ exports.carbon = require('lunatic/outputs/carbon')
 local inspect = require('lunatic/outputs/inspect')
 local f = require('lunatic/filters/common')
 local stdout = f.new_filter("stdout")
+stdout.__index = stdout
 function stdout:run(input)
 	io.write(inspect(input) .. "\n")
 	return input
 end
 function exports.stdout(tbl)
+	local rtor = tbl.reactor
 	local t = {}
 	setmetatable(t, stdout)
 	return t

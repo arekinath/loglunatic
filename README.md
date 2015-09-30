@@ -85,7 +85,7 @@ This time, however, we've added quite a few more filters. Filters stack up in or
 
 In particular, note the fact that the second `grok` filter uses `field = "request"`. The `request` field was created by the first `grok` (`%{qs:request}` -- `qs` is a predefined pattern for a quoted string). In this way you can parse nested data elegantly.
 
-Really the core of Loglunatic is the `grok{}` filter, which is used for parsing the log message text and splitting it up into semantic fields. `grok` accepts a pattern syntax very similar to the Logstash `grok`, but notably, it can also be used to build any abritrary LPEG parser. In the example above you can see both a `grok` based only on a logstash-style pattern, and one that combines this with an LPEG pattern.
+Really the core of Loglunatic is the `grok{}` filter, which is used for parsing the log message text and splitting it up into semantic fields. `grok` accepts a pattern syntax very similar to the Logstash `grok`, but notably, it can also be used to build any arbitrary LPEG parser. In the example above you can see both a `grok` based only on a logstash-style pattern, and one that combines this with an LPEG pattern.
 
 The `(1 - P("]"))^1` pattern indicates "match at least one character that is not `]`". You can find out more about LPEG patterns in [the LPEG documentation](http://www.inf.puc-rio.br/~roberto/lpeg/). They are more general than regular expressions, and typically can be executed faster.
 
